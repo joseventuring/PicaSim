@@ -1,0 +1,59 @@
+name: Intel Mac build (macOS 12+)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch third-party libraries (pinned, tested versions)
+        run: |
+          fetch() {
+            dir="third_party/$1"
+            rm -rf "$dir"; mkdir -p "$dir"
+            git -C "$dir" init -q
+            git -C "$dir" remote add origin "$2"
+            git -C "$dir" fetch -q --depth 1 origin "$3"
+            git -C "$dir" -c advice.detachedHead=false checkout -q FETCH_HEAD
+          }
+          fetch SDL2        https://github.com/libsdl-org/SDL.git      0aef2c3612294b8ed4fb9626b8426f4c9c835c6d
+          fetch SDL2_net    https://github.com/libsdl-org/SDL_net.git  f403029c00f653c81e3695991f90dc7497e5ab9f
+          fetch openal-soft https://github.com/kcat/openal-soft.git    d3875f333fb6abe2f39d82caca329414871ae53b
+          fetch imgui       https://github.com/ocornut/imgui.git       b48d1afbe8ee8b238e2961dc363a949dd7304e23
+          fetch stb         https://github.com/nothings/stb.git        2b2e64bc4778df6a06fbea3a5dbe61f7a76ecf19
+          fetch glm         https://github.com/g-truc/glm.git          6f14f4792a0cde5d0cf2c910506724d61cb95834
+
+      - name: Install Ninja
+        run: brew install ninja || true
+
+      - name: Configure (x86_64, runs on macOS 12 and newer)
+        run: |
+          cmake -S . -B build/mac -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+            -DCMAKE_IGNORE_PREFIX_PATH="/usr/local;/opt/homebrew;/usr/X11R6" \
+            -DPICASIM_ENABLE_VR=OFF
+
+      - name: Build
+        run: cmake --build build/mac -j "$(sysctl -n hw.ncpu)"
+
+      - name: Package app + DMG
+        run: |
+          rm -rf dist
+          cmake --install build/mac
+          bash ./macos_create_app_bundle.sh dist/PicaSim-*/ dist
+          codesign --force --deep --sign - dist/PicaSim.app
+          bash ./macos_create_dmg.sh dist/PicaSim.app dist
+          echo "--- minimum macOS version of the binary ---"
+          otool -l dist/PicaSim.app/Contents/MacOS/PicaSim | grep -A3 LC_BUILD_VERSION | grep minos
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: PicaSim-intel-mac
+          path: dist/PicaSim-*.dmg
+          retention-days: 30
