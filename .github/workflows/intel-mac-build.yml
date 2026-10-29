@@ -36,6 +36,7 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=x86_64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
             -DCMAKE_IGNORE_PREFIX_PATH="/usr/local;/opt/homebrew;/usr/X11R6" \
+                           -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DPICASIM_ENABLE_VR=OFF
 
       - name: Build
